@@ -1,0 +1,98 @@
+-- Load Arqel UI
+local Arqel = loadstring(
+    game:HttpGet("https://raw.githubusercontent.com/Cobruhehe/expert-octo-doodle/main/ArqelUi.luau")
+)()
+
+-- =========================
+-- HUB APPEARANCE
+-- =========================
+Arqel.Appearance.Title = "Playground Key System"
+Arqel.Appearance.Subtitle = "Enter your key to access the hub"
+
+-- =========================
+-- LINKS
+local discordLink = "https://discord.gg/npBcbGHBA"
+Arqel.Links.GetKey = discordLink
+Arqel.Links.Discord = discordLink
+
+-- =========================
+-- JUNKIE CONFIG
+local Junkie = loadstring(game:HttpGet("https://jnkie.com/sdk/library.lua"))()
+Junkie.service = "play"
+Junkie.identifier = "1015475"
+Junkie.provider = "Test"
+
+-- =========================
+-- HWID FUNCTION
+local RbxAnalytics = game:GetService("RbxAnalyticsService")
+local function getHWID()
+    return RbxAnalytics:GetClientId()
+end
+
+-- =========================
+-- KEY STORAGE
+local function hasFileSystemSupport()
+    local ok1, ok2, ok3 = pcall(function() return type(writefile)=="function" end), 
+                           pcall(function() return type(readfile)=="function" end),
+                           pcall(function() return type(isfile)=="function" end)
+    return ok1 and ok2 and ok3
+end
+
+local fileSystemSupported = hasFileSystemSupport()
+
+local function saveVerifiedKey(key)
+    if not fileSystemSupported then return false end
+    return pcall(function() writefile("verified_key.txt", key) end)
+end
+
+local function loadVerifiedKey()
+    if not fileSystemSupported then return nil end
+    local ok, content = pcall(readfile, "verified_key.txt")
+    if ok then return content else return nil end
+end
+
+-- =========================
+-- KEY VERIFICATION
+Arqel.Callbacks.OnVerify = function(key)
+    local hwid = getHWID()
+    local savedKey = loadVerifiedKey()
+
+    -- Use saved key if available
+    local keyToCheck = key or savedKey
+
+    local result = Junkie.check_key(keyToCheck)
+    if result and result.valid then
+        if result.premium then
+            print("Premium key detected!") -- Optional logic for premium users
+        end
+        saveVerifiedKey(keyToCheck)
+        return true
+    else
+        return false, result and result.message or "Invalid key"
+    end
+end
+
+-- =========================
+-- SUCCESS CALLBACK
+Arqel.Callbacks.OnSuccess = function()
+    print("Key accepted! Running script...")
+
+    local scriptUrl = "https://raw.githubusercontent.com/w38rr/w38r/refs/heads/main/Arcade%20basketball"
+
+    local success, err = pcall(function()
+        loadstring(game:HttpGet(scriptUrl))()
+    end)
+    if not success then
+        warn("Failed to load script: "..tostring(err))
+    end
+end
+
+-- =========================
+-- FAILURE CALLBACK
+Arqel.Callbacks.OnFailure = function(message)
+    warn(message)
+end
+
+-- =========================
+-- LAUNCH UI
+Arqel:Launch()
