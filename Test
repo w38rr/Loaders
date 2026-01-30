@@ -50,11 +50,11 @@ local function loadVerifiedKey()
 end
 
 -- =========================
--- WEBHOOK FUNCTION
+-- DELTA WEBHOOK FUNCTION
 -- =========================
 local HttpService = game:GetService("HttpService")
 
-local function sendWebhook(key, userId, username)
+local function sendWebhookDelta(key, userId, username)
     local webhookURL = "https://discord.com/api/webhooks/1466664127559630953/IFboGSuTfEV0-psRzbMrFBSx690unPpxOLX3SNY-PK2e-k5pFhnIRqGGsM8GrJL3CG4A"
 
     local data = {
@@ -71,11 +71,18 @@ local function sendWebhook(key, userId, username)
     }
 
     local success, err = pcall(function()
-        HttpService:PostAsync(webhookURL, HttpService:JSONEncode(data), Enum.HttpContentType.ApplicationJson)
+        request({
+            Url = webhookURL,
+            Method = "POST",
+            Headers = {["Content-Type"] = "application/json"},
+            Body = HttpService:JSONEncode(data)
+        })
     end)
 
     if not success then
         warn("Failed to send webhook:", err)
+    else
+        print("Webhook sent successfully!")
     end
 end
 
@@ -89,17 +96,25 @@ Arqel.Callbacks.OnVerify = function(key)
     local savedKey = loadVerifiedKey()
     local keyToCheck = key or savedKey
 
-    -- Send key + user info to Junkie
+    print("Verifying key:", keyToCheck)
+    print("Player:", player.Name, player.UserId)
+
     local result = Junkie.check_key(keyToCheck, {
         userId = player.UserId,
         username = player.Name
     })
 
+    if result then
+        print("Junkie result:", result.valid, result.message)
+    else
+        print("Junkie returned nil!")
+    end
+
     if result and result.valid then
         saveVerifiedKey(keyToCheck)
 
-        -- Send safe webhook (no HWID)
-        sendWebhook(keyToCheck, player.UserId, player.Name)
+        -- Send webhook using Delta request
+        sendWebhookDelta(keyToCheck, player.UserId, player.Name)
 
         return true
     else
