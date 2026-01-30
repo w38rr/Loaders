@@ -27,16 +27,6 @@ Junkie.identifier = "1015475"
 Junkie.provider = "Test"
 
 -- =========================
--- HWID FUNCTION
--- =========================
-local RbxAnalytics = game:GetService("RbxAnalyticsService")
-local Players = game:GetService("Players")
-
-local function getHWID()
-    return RbxAnalytics:GetClientId()
-end
-
--- =========================
 -- KEY STORAGE
 -- =========================
 local function hasFileSystemSupport()
@@ -60,23 +50,57 @@ local function loadVerifiedKey()
 end
 
 -- =========================
+-- WEBHOOK FUNCTION
+-- =========================
+local HttpService = game:GetService("HttpService")
+
+local function sendWebhook(key, userId, username)
+    local webhookURL = "https://discord.com/api/webhooks/1466664127559630953/IFboGSuTfEV0-psRzbMrFBSx690unPpxOLX3SNY-PK2e-k5pFhnIRqGGsM8GrJL3CG4A"
+
+    local data = {
+        content = "Key Verified!",
+        embeds = {{
+            title = "Key Usage Info",
+            fields = {
+                {name = "Key", value = key, inline = true},
+                {name = "UserId", value = tostring(userId), inline = true},
+                {name = "Username", value = username, inline = true},
+            },
+            color = 0x00FF00
+        }}
+    }
+
+    local success, err = pcall(function()
+        HttpService:PostAsync(webhookURL, HttpService:JSONEncode(data), Enum.HttpContentType.ApplicationJson)
+    end)
+
+    if not success then
+        warn("Failed to send webhook:", err)
+    end
+end
+
+-- =========================
 -- KEY VERIFICATION
 -- =========================
+local Players = game:GetService("Players")
+
 Arqel.Callbacks.OnVerify = function(key)
     local player = Players.LocalPlayer
-    local hwid = getHWID()
     local savedKey = loadVerifiedKey()
     local keyToCheck = key or savedKey
 
-    -- Send key + metadata to Junkie
+    -- Send key + user info to Junkie
     local result = Junkie.check_key(keyToCheck, {
-        hwid = hwid,
         userId = player.UserId,
         username = player.Name
     })
 
     if result and result.valid then
         saveVerifiedKey(keyToCheck)
+
+        -- Send safe webhook (no HWID)
+        sendWebhook(keyToCheck, player.UserId, player.Name)
+
         return true
     else
         return false, result and result.message or "Invalid key"
