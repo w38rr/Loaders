@@ -21,26 +21,24 @@ Arqel.Links.Discord = discordLink
 -- =========================
 -- JUNKIE CONFIG
 -- =========================
-local Junkie = loadstring(game:HttpGet("https://jnkie.com/sdk/library.lua"))()
-Junkie.service = "play"
-Junkie.identifier = "1015475"
-Junkie.provider = "Test"
+local JunkieCore = loadstring(game:HttpGet("https://jnkie.com/sdk/library.lua"))()
+JunkieCore.service = "play"
+JunkieCore.identifier = "1015475"
+JunkieCore.provider = "Test"
+
+-- Alias for webhook
+local JD = JunkieCore
 
 -- =========================
 -- KEY STORAGE
 -- =========================
-local function hasFileSystemSupport()
+local function hasFS()
     return writefile and readfile and isfile
 end
-
-local fsSupported = hasFileSystemSupport()
+local fsSupported = hasFS()
 
 local function saveKey(key)
-    if fsSupported then
-        pcall(function()
-            writefile("verified_key.txt", key)
-        end)
-    end
+    if fsSupported then pcall(function() writefile("verified_key.txt", key) end) end
 end
 
 local function loadKey()
@@ -52,6 +50,20 @@ local function loadKey()
 end
 
 -- =========================
+-- PLATFORM & EXECUTOR INFO
+-- =========================
+local function getPlatform()
+    local UIS = game:GetService("UserInputService")
+    if UIS.TouchEnabled and not UIS.KeyboardEnabled then return "Mobile"
+    elseif UIS.KeyboardEnabled then return "PC"
+    elseif UIS.GamepadEnabled then return "Console"
+    else return "Unknown" end
+end
+
+local platform = getPlatform()
+local executor = (identifyexecutor and identifyexecutor()) or "Unknown"
+
+-- =========================
 -- KEY VERIFICATION
 -- =========================
 local Players = game:GetService("Players")
@@ -61,21 +73,108 @@ Arqel.Callbacks.OnVerify = function(key)
     local savedKey = loadKey()
     local keyToCheck = key or savedKey
 
-    print("[KeySystem] Verifying:", keyToCheck)
-    print("[KeySystem] Player:", player.Name, player.UserId)
+    print("[KeySystem] Verifying key:", keyToCheck)
 
-    -- Metadata sent to Junkie webhook
-    local result = Junkie.check_key(keyToCheck, {
+    local metadata = {
         userId = player.UserId,
         username = player.Name
-    })
+    }
+
+    local result = JunkieCore.check_key(keyToCheck, metadata)
 
     if result and result.valid then
         saveKey(keyToCheck)
-        print("[KeySystem] Key valid")
+        print("[KeySystem] Key valid!")
+
+        -- =========================
+        -- SEND WEBHOOK LOG
+        -- =========================
+        local premiumStatus = "Unable to verify"
+        local serviceName = "N/A"
+        local expirationStatus = "Checking..."
+        local discordId = "No account linked"
+        local gameName = "Unknown"
+
+        -- Premium
+        if type(JunkieCore) == "table" and type(JunkieCore.GetIsPremium) == "function" then
+            local s, v = pcall(JunkieCore.GetIsPremium)
+            premiumStatus = s and (v and "Premium Enabled" or "Standard Access") or "Check failed"
+        end
+
+        -- Service Name
+        if type(JunkieCore) == "table" and type(JunkieCore.GetServiceName) == "function" then
+            local s, n = pcall(JunkieCore.GetServiceName)
+            if s and n and n ~= "" then serviceName = tostring(n) end
+        end
+
+        -- Expiration
+        if type(JunkieCore) == "table" and type(JunkieCore.GetExpiresAt) == "function" then
+            local success, expiresAt = pcall(JunkieCore.GetExpiresAt)
+            if success then
+                if expiresAt and expiresAt > 0 then
+                    local currentTime = os.time() * 1000
+                    if currentTime < expiresAt then
+                        local timeLeft = (expiresAt - currentTime) / 1000
+                        local daysLeft = math.floor(timeLeft / 86400)
+                        local hoursLeft = math.floor((timeLeft % 86400) / 3600)
+                        expirationStatus = string.format("Valid for %dd %dh", daysLeft, hoursLeft)
+                    else
+                        expirationStatus = "License expired"
+                    end
+                else
+                    expirationStatus = "Permanent license"
+                end
+            else
+                expirationStatus = "Query failed"
+            end
+        else
+            expirationStatus = "Service error (ERR_AUTH_002)"
+        end
+
+        -- Discord ID
+        if type(JunkieCore) == "table" and type(JunkieCore.GetDiscordId) == "function" then
+            local s, id = pcall(JunkieCore.GetDiscordId)
+            if s and id and id ~= "" then discordId = string.format("<@%s> (ID: %s)", id, id) end
+        end
+
+        -- Game Info
+        local s, info = pcall(function()
+            return game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId)
+        end)
+        if s and info and info.Name then gameName = tostring(info.Name) end
+
+        local embedColor = 0x7289DA
+        if type(JunkieCore) == "table" and type(JunkieCore.GetIsPremium) == "function" then
+            local s, isPremium = pcall(JunkieCore.GetIsPremium)
+            if s and isPremium then embedColor = 0x00D9FF end
+        end
+
+        -- Send webhook via Junkie relay
+        JD.SEND_WEBHOOK("5ca1ae2f-1f61-40d7-a3f2-9d1d1143f798", {
+            username = "Junkie Security",
+            avatar_url = "https://jnkie.com/icon.webp",
+            embeds = {{
+                author = {name="Script Execution", icon_url="https://jnkie.com/icon.webp"},
+                color = embedColor,
+                fields = {
+                    {name="Premium Status", value=premiumStatus, inline=true},
+                    {name="Service", value=serviceName, inline=true},
+                    {name="Key Expiration", value=expirationStatus, inline=true},
+                    {name="Discord Account", value=discordId, inline=true},
+                    {name="Username", value=string.format("%s (ID: %d)", player.Name, player.UserId), inline=true},
+                    {name="Platform", value=platform, inline=true},
+                    {name="Executor", value=executor, inline=true},
+                    {name="Game Name", value=gameName, inline=true},
+                    {name="Place ID", value=tostring(game.PlaceId), inline=true}
+                },
+                footer = {text="Junkie-Development", icon_url="https://jnkie.com/icon.webp"},
+                timestamp = os.date("!%Y-%m-%dT%H:%M:%S")
+            }}
+        })
+
         return true
     else
-        warn("[KeySystem] Key invalid")
+        warn("[KeySystem] Key invalid or Junkie failed")
         return false, result and result.message or "Invalid key"
     end
 end
@@ -84,16 +183,12 @@ end
 -- SUCCESS CALLBACK
 -- =========================
 Arqel.Callbacks.OnSuccess = function()
-    print("[KeySystem] Access granted, loading script...")
-
+    print("[KeySystem] Access granted! Loading script...")
     local scriptUrl = "https://raw.githubusercontent.com/w38rr/w38r/refs/heads/main/Mine-a-brainrot"
     local success, err = pcall(function()
         loadstring(game:HttpGet(scriptUrl))()
     end)
-
-    if not success then
-        warn("Failed to load main script:", err)
-    end
+    if not success then warn("[KeySystem] Failed to load script:", err) end
 end
 
 -- =========================
