@@ -27,6 +27,16 @@ Junkie.identifier = "1015475"
 Junkie.provider = "Test"
 
 -- =========================
+-- HWID FUNCTION
+-- =========================
+local RbxAnalytics = game:GetService("RbxAnalyticsService")
+local Players = game:GetService("Players")
+
+local function getHWID()
+    return RbxAnalytics:GetClientId()
+end
+
+-- =========================
 -- KEY STORAGE
 -- =========================
 local function hasFileSystemSupport()
@@ -50,72 +60,23 @@ local function loadVerifiedKey()
 end
 
 -- =========================
--- DELTA WEBHOOK FUNCTION
--- =========================
-local HttpService = game:GetService("HttpService")
-
-local function sendWebhookDelta(key, userId, username)
-    local webhookURL = "https://discord.com/api/webhooks/1466664127559630953/IFboGSuTfEV0-psRzbMrFBSx690unPpxOLX3SNY-PK2e-k5pFhnIRqGGsM8GrJL3CG4A"
-
-    local data = {
-        content = "Key Verified!",
-        embeds = {{
-            title = "Key Usage Info",
-            fields = {
-                {name = "Key", value = key, inline = true},
-                {name = "UserId", value = tostring(userId), inline = true},
-                {name = "Username", value = username, inline = true},
-            },
-            color = 0x00FF00
-        }}
-    }
-
-    local success, err = pcall(function()
-        request({
-            Url = webhookURL,
-            Method = "POST",
-            Headers = {["Content-Type"] = "application/json"},
-            Body = HttpService:JSONEncode(data)
-        })
-    end)
-
-    if not success then
-        warn("Failed to send webhook:", err)
-    else
-        print("Webhook sent successfully!")
-    end
-end
-
--- =========================
 -- KEY VERIFICATION
 -- =========================
-local Players = game:GetService("Players")
-
 Arqel.Callbacks.OnVerify = function(key)
     local player = Players.LocalPlayer
+    local hwid = getHWID()
     local savedKey = loadVerifiedKey()
     local keyToCheck = key or savedKey
 
-    print("Verifying key:", keyToCheck)
-    print("Player:", player.Name, player.UserId)
-
+    -- Send key + metadata to Junkie
     local result = Junkie.check_key(keyToCheck, {
+        hwid = hwid,
         userId = player.UserId,
         username = player.Name
     })
 
-    if result then
-        print("Junkie result:", result.valid, result.message)
-    else
-        print("Junkie returned nil!")
-    end
-
     if result and result.valid then
         saveVerifiedKey(keyToCheck)
-
-        -- Send webhook using Delta request
-        sendWebhookDelta(keyToCheck, player.UserId, player.Name)
-
         return true
     else
         return false, result and result.message or "Invalid key"
