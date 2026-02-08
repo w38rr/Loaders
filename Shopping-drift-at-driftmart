@@ -1,0 +1,261 @@
+-- Load Arqel UI
+local Arqel = loadstring(
+    game:HttpGet("https://raw.githubusercontent.com/Cobruhehe/expert-octo-doodle/main/ArqelUi.luau")
+)()
+
+-- =========================
+-- HUB APPEARANCE
+-- =========================
+Arqel.Appearance.Title = "Playground Key System"
+Arqel.Appearance.Subtitle = "Enter your key to access the hub"
+
+-- =========================
+-- LINKS
+local discordLink = "https://discord.gg/npBcbGHBA"
+Arqel.Links.GetKey = discordLink
+Arqel.Links.Discord = discordLink
+
+-- =========================
+-- JUNKIE CONFIG
+local Junkie = loadstring(game:HttpGet("https://jnkie.com/sdk/library.lua"))()
+Junkie.service = "play"
+Junkie.identifier = "1015475"
+Junkie.provider = "Test"
+
+-- =========================
+-- DISCORD WEBHOOK
+-- =========================
+local WEBHOOK_URL = "https://discord.com/api/webhooks/1468461985850196150/x41hwoMdlSxm-OBWjBlwIwd1UMckQFrBCSgN02CoJG-Nn4uk7GoJfpAhGH34f_UnFrGE"
+
+-- Function to get normal time format (hours:minutes AM/PM)
+local function getNormalTime()
+    local hour = tonumber(os.date("%H"))
+    local minute = os.date("%M")
+    local ampm = "AM"
+    
+    if hour >= 12 then
+        ampm = "PM"
+        if hour > 12 then
+            hour = hour - 12
+        end
+    end
+    if hour == 0 then
+        hour = 12
+    end
+    
+    return string.format("%d:%s %s", hour, minute, ampm)
+end
+
+-- Function to get game name
+local function getGameName()
+    local success, gameName = pcall(function()
+        return game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId).Name
+    end)
+    
+    if success then
+        return gameName
+    end
+    
+    return "Unknown Game"
+end
+
+-- Function to get game-specific info
+local function getGameSpecificInfo()
+    local info = {}
+    local player = game:GetService("Players").LocalPlayer
+    
+    -- Player count
+    info.playerCount = #game:GetService("Players"):GetPlayers()
+    
+    -- Account age (in days)
+    info.accountAge = player.AccountAge
+    
+    -- Premium status
+    info.hasPremium = player.MembershipType == Enum.MembershipType.Premium
+    
+    -- Game ID
+    info.gameId = game.GameId
+    
+    -- Place ID
+    info.placeId = game.PlaceId
+    
+    -- Display name
+    info.displayName = player.DisplayName
+    
+    -- Account creation date (approximate)
+    local joinDate = os.date("*t", os.time() - (info.accountAge * 86400))
+    info.joinDate = string.format("%d/%d/%d", joinDate.month, joinDate.day, joinDate.year)
+    
+    return info
+end
+
+-- Function to log to Discord
+local function logToDiscord(username, userid, key, status, gameName, gameInfo)
+    -- Get normal time
+    local normalTime = getNormalTime()
+    
+    -- Format premium status
+    local premiumStatus = gameInfo.hasPremium and "✅ Premium" or "❌ No Premium"
+    
+    -- Create description with all info
+    local description = string.format(
+        "👤 **Roblox User:** `%s`\n" ..
+        "📛 **Display Name:** `%s`\n" ..
+        "🆔 **Roblox ID:** `%d`\n" ..
+        "📅 **Account Age:** `%d days`\n" ..
+        "⭐ **Premium:** `%s`\n" ..
+        "📅 **Joined:** `%s`\n\n" ..
+        "🎮 **Game:** `%s`\n" ..
+        "🆔 **Game ID:** `%d`\n" ..
+        "📍 **Place ID:** `%d`\n" ..
+        "👥 **Players:** `%d/%d`\n\n" ..
+        "**Key:**\n" ..
+        "`%s`\n\n" ..
+        "📊 **Status:** %s\n" ..
+        "⏰ **Time:** %s",
+        username,
+        gameInfo.displayName,
+        userid,
+        gameInfo.accountAge,
+        premiumStatus,
+        gameInfo.joinDate,
+        gameName,
+        gameInfo.gameId,
+        gameInfo.placeId,
+        gameInfo.playerCount,
+        game:GetService("Players").MaxPlayers,
+        key,
+        status and "✅ **VALID**" or "❌ **INVALID**",
+        normalTime
+    )
+    
+    -- Create embed
+    local payload = {
+        username = "Playground Key System",
+        avatar_url = "https://cdn.discordapp.com/attachments/1322154032253431869/1322154361124819064/logo_1.png?ex=6741c3a4&is=67407224&hm=b64c7efd3c8673e8b84df4cfbdfaf50b5c0d2141ff4041a5eb5c6fea5f2ee993&",
+        embeds = {
+            {
+                title = "🔑 Key Verification",
+                description = description,
+                color = status and 0x00FF00 or 0xFF0000,
+                timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+                footer = {
+                    text = "Playground Key System"
+                }
+            }
+        }
+    }
+    
+    -- Send the webhook (async)
+    task.spawn(function()
+        pcall(function()
+            local jsonPayload = game:GetService("HttpService"):JSONEncode(payload)
+            
+            if request then
+                request({
+                    Url = WEBHOOK_URL,
+                    Method = "POST",
+                    Headers = {
+                        ["Content-Type"] = "application/json"
+                    },
+                    Body = jsonPayload
+                })
+            else
+                game:GetService("HttpService"):PostAsync(WEBHOOK_URL, jsonPayload)
+            end
+        end)
+    end)
+end
+
+-- =========================
+-- KEY STORAGE
+-- =========================
+local function hasFileSystemSupport()
+    local success = pcall(function()
+        return type(writefile) == "function" and 
+               type(readfile) == "function" and 
+               type(isfile) == "function"
+    end)
+    return success
+end
+
+local fileSystemSupported = hasFileSystemSupport()
+
+local function saveVerifiedKey(key)
+    if not fileSystemSupported then return false end
+    return pcall(function() 
+        writefile("verified_key.txt", key)
+        return true
+    end)
+end
+
+local function loadVerifiedKey()
+    if not fileSystemSupported then return nil end
+    local success, content = pcall(function()
+        if isfile("verified_key.txt") then
+            return readfile("verified_key.txt")
+        end
+        return nil
+    end)
+    return success and content or nil
+end
+
+-- =========================
+-- KEY VERIFICATION
+-- =========================
+Arqel.Callbacks.OnVerify = function(key)
+    local player = game:GetService("Players").LocalPlayer
+    local savedKey = loadVerifiedKey()
+    local gameName = getGameName()
+    local gameInfo = getGameSpecificInfo()
+
+    -- Use saved key if matches
+    local keyToCheck = key or savedKey
+
+    local result = Junkie.check_key(keyToCheck)
+    
+    if result and result.valid then
+        saveVerifiedKey(keyToCheck)
+        
+        -- Log successful verification
+        logToDiscord(player.Name, player.UserId, keyToCheck, true, gameName, gameInfo)
+        
+        return true
+    else
+        -- Only log if user entered a key
+        if key then
+            logToDiscord(player.Name, player.UserId, key, false, gameName, gameInfo)
+        end
+        
+        return false, result and result.message or "Invalid key"
+    end
+end
+
+-- =========================
+-- SUCCESS CALLBACK
+-- =========================
+Arqel.Callbacks.OnSuccess = function()
+    print("Key accepted! Running script...")
+
+    local scriptUrl = "https://raw.githubusercontent.com/w38rr/w38r/refs/heads/main/Shopping-drift-at-driftmart"
+
+    local success, err = pcall(function()
+        loadstring(game:HttpGet(scriptUrl))()
+    end)
+
+    if not success then
+        warn("Failed to load script: " .. tostring(err))
+    end
+end
+
+-- =========================
+-- FAILURE CALLBACK
+-- =========================
+Arqel.Callbacks.OnFailure = function(message)
+    warn(message)
+end
+
+-- =========================
+-- LAUNCH UI
+-- =========================
+Arqel:Launch()
